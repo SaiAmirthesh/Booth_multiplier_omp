@@ -4,16 +4,16 @@
 #include <time.h>
 #include <omp.h>
 
-int from_signed_5bit(const char *b) {
-    int n = (int)strtol(b, NULL, 2);
-    if (b[0] == '1')
+int convert_to_int(const char *k) {
+    int n = (int)strtol(k, NULL, 2);
+    if (k[0] == '1')
         n -= (1 << 5);
     return n;
 }
 
-int booth_multiply(char *m,char *q) {
-    int M = from_signed_5bit(m);
-    int Q = from_signed_5bit(q);
+int booth_algorithm(char *m,char *q) {
+    int M = convert_to_int(m);
+    int Q = convert_to_int(q);
     int A = 0, Q_1 = 0;
     int count = 5;
 
@@ -30,20 +30,17 @@ int booth_multiply(char *m,char *q) {
         if(A<0){
             signA = 1;
         }
-        else{
-            signA = 0;
-        }
+        
+        int combined = (A << 6) | ((Q << 1) | Q_1);  
+        combined &= 0x1FFFF;                         
+        combined = (combined >> 1) | (signA << 16);  
 
-        int combined = (A << 6) | ((Q << 1) | Q_1);
-        combined &= 0x1FFFF;
-        combined = (combined >> 1) | (signA << 16);
-
-        A = (combined >> 6) & 0x3F;//
-        if (A & 0x20) A -= 0x40;//
-        Q = (combined >> 1) & 0x1F;//
-        Q_1 = combined & 1;//
+        A = (combined >> 6) & 0x3F;  
+        if (A & 0x20) A -= 0x40;   
+        Q = (combined >> 1) & 0x1F;  
+        Q_1 = combined & 1;  
     }
-    return (A << 5) | Q;
+    return (A << 5) | Q;   
 }
 
 int load_dataset(const char *filename, char **m, char **q) {
@@ -75,14 +72,9 @@ int main() {
     int capacity =50000;
 
     int num_threads;
-    int max_threads = omp_get_num_procs();
-    printf("Enter number of threads (1–%d): ", max_threads);
+    printf("Enter number of threads: ");
     scanf("%d", &num_threads);
-    if (num_threads > max_threads) {
-        printf("Requested %d threads, but only %d cores available. Limiting to %d.\n",
-               num_threads, max_threads, max_threads);
-        num_threads = max_threads;
-    }
+    
     omp_set_num_threads(num_threads);
 
     char **m = malloc(capacity * sizeof(char*));
@@ -91,8 +83,8 @@ int main() {
         m[i] = malloc(8);
         q[i] = malloc(8);
     }
-    int *res_seq = malloc(capacity * sizeof(int));
-    int *res_par = malloc(capacity * sizeof(int));
+    int *result_seq = malloc(capacity * sizeof(int));
+    int *result_par = malloc(capacity * sizeof(int));
 
     int n = load_dataset(filename, m, q);
     if (n == 0) {
@@ -101,21 +93,23 @@ int main() {
     }
 
     clock_t start_seq = clock();
-    for (int i = 0; i < n; i++)
-    res_seq[i] = booth_multiply(m[i], q[i]);
+    for (int i = 0; i < n; i++){
+        result_seq[i] = booth_algorithm(m[i], q[i]);
+    }
     clock_t end_seq = clock();
     double seq_time = ((double)(end_seq - start_seq)) / CLOCKS_PER_SEC;
 
     clock_t start_par = clock();
     #pragma omp parallel for schedule(static, 500)
-    for (int i = 0; i < n; i++)
-    res_par[i] = booth_multiply(m[i], q[i]);
+    for (int i = 0; i < n; i++){
+        result_par[i] = booth_algorithm(m[i], q[i]);
+    }
     clock_t end_par = clock();
     double par_time = ((double)(end_par - start_par)) / CLOCKS_PER_SEC;
 
     int match = 1;
     for (int i = 0; i < n; i++) {
-        if (res_seq[i] != res_par[i]) {
+        if (result_seq[i] != result_par[i]) {
             match = 0;
             break;
         }
@@ -133,7 +127,7 @@ int main() {
         free(m[i]);
         free(q[i]);
     }
-    free(m); free(q); free(res_seq); free(res_par);
+    free(m); free(q); free(result_seq); free(result_par);
 
     return 0;
 }
