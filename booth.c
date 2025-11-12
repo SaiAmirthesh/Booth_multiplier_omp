@@ -11,36 +11,36 @@ int convert_to_int(const char *k) {
     return n;
 }
 
-int booth_algorithm(char *m,char *q) {
+int booth_algorithm(char *m, char *q) {
     int M = convert_to_int(m);
     int Q = convert_to_int(q);
-    int A = 0, Q_1 = 0;
-    int count = 5;
+    int A = 0;
+    int Q_1 = 0;
 
-    for (int i = 0; i < count; i++) {
-        int Q0 = Q & 1;
-        if (Q0 == 1 && Q_1 == 0){
-            A -= M;
+    for (int i = 0; i < 5; i++) {
+        int Q0 = Q & 1;  
+        
+        if (Q0 == 1 && Q_1 == 0) {
+            A -= M;      
         }
-        else if (Q0 == 0 && Q_1 == 1){
-            A += M;
+        else if (Q0 == 0 && Q_1 == 1) {
+            A += M;      
         }
 
-        int signA = 0;
-        if(A<0){
-            signA = 1;
+        int A_LSB = A & 1;    
+        int Q_LSB = Q & 1;
+
+        A = A >> 1;
+        if (A < 0 && (A & (1 << 4)) == 0) {
+            A = A | (1 << 5); 
         }
         
-        int combined = (A << 6) | ((Q << 1) | Q_1);  
-        combined &= 0x1FFFF;                         
-        combined = (combined >> 1) | (signA << 16);  
-
-        A = (combined >> 6) & 0x3F;  
-        if (A & 0x20) A -= 0x40;   
-        Q = (combined >> 1) & 0x1F;  
-        Q_1 = combined & 1;  
+        Q = Q >> 1;
+        Q = Q | (A_LSB << 4);
+        
+        Q_1 = Q_LSB;
     }
-    return (A << 5) | Q;   
+    return (A << 5) | Q;
 }
 
 int load_dataset(const char *filename, char **m, char **q) {
@@ -71,11 +71,10 @@ int main() {
     const char *filename = "dataset_50k.csv";
     int capacity =50000;
 
-    int num_threads;
+    int threads;
     printf("Enter number of threads: ");
-    scanf("%d", &num_threads);
-    
-    omp_set_num_threads(num_threads);
+    scanf("%d", &threads);
+    omp_set_num_threads(threads);
 
     char **m = malloc(capacity * sizeof(char*));
     char **q = malloc(capacity * sizeof(char*));
@@ -92,7 +91,7 @@ int main() {
         return 1;
     }
 
-    clock_t start_seq = clock();
+    clock_t start_seq = clock();  
     for (int i = 0; i < n; i++){
         result_seq[i] = booth_algorithm(m[i], q[i]);
     }
@@ -127,7 +126,10 @@ int main() {
         free(m[i]);
         free(q[i]);
     }
-    free(m); free(q); free(result_seq); free(result_par);
+    free(m); 
+    free(q); 
+    free(result_seq); 
+    free(result_par);
 
     return 0;
 }
